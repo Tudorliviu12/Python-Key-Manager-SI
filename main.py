@@ -7,7 +7,8 @@ def incarcare_date():
         tabel.delete(rand)
     fisiere = get_fisiere()
     for f in fisiere:
-        tabel.insert("", tk.END, values=(f[0], f[1], f[4], f[5]))
+        hash_short = f[3][:15] + "..." if f[3] else "None"
+        tabel.insert("", tk.END, values=(f[0], f[1], f[4], f[5], hash_short))
 
 def buton_adauga_fisier():
     path = filedialog.askopenfilename(title="Alege fisierul de introdus in database")
@@ -22,14 +23,17 @@ def buton_delete_fisier():
         return
     rand = tabel.item(select[0])
     id_fisier = rand["values"][0]
-    delete_fisier(id_fisier)
-    incarcare_date()
+    nume_fisier = rand["values"][1]
+    raspuns = messagebox.askyesno("Stergere", f"Sigur vrei sa stergi fisierul {nume_fisier}?")
 
-    btn_sterge.config(state=tk.DISABLED)
-    btn_cripteaza.config(state=tk.DISABLED)
-    btn_decripteaza.config(state=tk.DISABLED)
+    if raspuns:
+        delete_fisier(id_fisier)
+        incarcare_date()
+        btn_sterge.config(state=tk.DISABLED)
+        btn_cripteaza.config(state=tk.DISABLED)
+        btn_decripteaza.config(state=tk.DISABLED)
+        print(f"Fisierul {rand['values'][1]} a fost sters")
 
-    print(f"Fisierul {rand['values'][1]} a fost sters")
 
 def buton_criptare():
     select = tabel.selection()
@@ -82,12 +86,17 @@ fereastra.geometry("600x450")
 titlu = tk.Label(fereastra, text="Fisiere", font=("Arial", 16, "bold"))
 titlu.pack(pady=10)
 
-coloane = ("ID", "Nume Fisier", "Stare", "ID Cheie")
+coloane = ("ID", "Nume Fisier", "Stare", "ID Cheie", "Hash")
 tabel = ttk.Treeview(fereastra, columns=coloane, show="headings")
 
 for col in coloane:
     tabel.heading(col, text=col)
-    tabel.column(col, width=100)
+    if col == "ID" or col=="ID Cheie":
+        tabel.column(col, width=60)
+    elif col == "Hash" or col == "Stare":
+        tabel.column(col, width=120)
+    else:
+        tabel.column(col, width=150)
 
 tabel.pack(pady=20, fill="x", padx=20)
 tabel.bind("<<TreeviewSelect>>", click_tabel)
