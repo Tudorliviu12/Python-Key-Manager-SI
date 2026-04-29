@@ -1,6 +1,8 @@
 import sqlite3
 import os
 import hashlib
+import secrets
+import subprocess
 
 def init_db():
     conn = sqlite3.connect('local.db')
@@ -108,6 +110,57 @@ def get_fisiere():
     conn = sqlite3.connect('local.db')
     c = conn.cursor()
     c.execute("SELECT * FROM fisiere")
+    rez = c.fetchall()
+    conn.close()
+    return rez
+
+def get_detalii_cheie(id_cheie):
+    conn = sqlite3.connect('local.db')
+    c = conn.cursor()
+    c.execute('''SELECT valoare_cheie, iv FROM chei WHERE id_cheie = ?''', (id_cheie,))
+    rez = c.fetchone()
+    conn.close()
+    return rez
+
+def get_toate_cheile():
+    conn = sqlite3.connect('local.db')
+    c = conn.cursor()
+    c.execute('''
+        SELECT c.id_cheie, a.nume
+        FROM chei c
+        JOIN algoritmi a ON c.id_algoritm = a.id_algoritm
+    ''')
+    rez = [f"{rand[0]} ({rand[1]})" for rand in c.fetchall()]
+    conn.close()
+    return rez
+
+def generare_cheie(id_algoritm):
+    if id_algoritm == 1:
+        val_cheie = secrets.token_hex(32)
+        iv = secrets.token_hex(16)
+        lungime_biti = 256
+    else:
+        subprocess.run([r"C:\Program Files\Git\usr\bin\openssl.exe", "genrsa", "-out", "private.pem", "2048"], check=True)
+        subprocess.run([r"C:\Program Files\Git\usr\bin\openssl.exe", "rsa", "-in", "private.pem", "-pubout", "-out", "public.pem"], check=True)
+        val_cheie = "private.pem"
+        iv = "public.pem"
+        lungime_biti = 2048
+    conn = sqlite3.connect('local.db')
+    c = conn.cursor()
+    c.execute('''
+    INSERT INTO chei(valoare_cheie, lungime_biti, iv, id_algoritm)
+    VALUES (?, ?, ?, ?)
+    ''', (val_cheie, lungime_biti, iv, id_algoritm))
+
+    id_cheie_noua = c.lastrowid
+    conn.commit()
+    conn.close()
+    return id_cheie_noua, val_cheie, iv
+
+def get_all_chei_debug():
+    conn = sqlite3.connect('local.db')
+    c = conn.cursor()
+    c.execute('''SELECT * FROM chei''')
     rez = c.fetchall()
     conn.close()
     return rez
