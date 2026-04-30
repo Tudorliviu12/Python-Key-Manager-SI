@@ -3,6 +3,7 @@ import tkinter as tk
 import subprocess
 import os
 import time
+import hashlib
 import tracemalloc
 from tkinter import ttk, filedialog, messagebox
 from cryptography_logic import *
@@ -14,6 +15,13 @@ def incarcare_date():
     for f in fisiere:
         hash_short = f[3][:15] + "..." if f[3] else "None"
         tabel.insert("", tk.END, values=(f[0], f[1], f[4], f[5], hash_short))
+
+def calculeaza_hash_fisier(path_fisier):
+    sha256_hash = hashlib.sha256()
+    with open(path_fisier, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
 
 def buton_adauga_fisier():
     path = filedialog.askopenfilename(title="Alege fisierul de introdus in database")
@@ -147,7 +155,7 @@ def buton_decriptare():
 
     conn = sqlite3.connect('local.db')
     c = conn.cursor()
-    c.execute("SELECT path, id_cheie_activa FROM fisiere WHERE id_fisier = ?", (id_fisier,))
+    c.execute("SELECT path, id_cheie_activa, hash_original FROM fisiere WHERE id_fisier = ?", (id_fisier,))
     date_fisier = c.fetchone()
     conn.close()
 
@@ -158,6 +166,7 @@ def buton_decriptare():
     path_criptat = date_fisier[0] + ".enc"
     path_decriptat = date_fisier[0]
     id_cheie = date_fisier[1]
+    hash_vechi_din_db = date_fisier[2]
 
     date_cheie = get_detalii_cheie(id_cheie)
     cheie_hex, iv_hex = date_cheie
@@ -185,8 +194,13 @@ def buton_decriptare():
             update_fisier(id_fisier, None, "Decriptat")
             incarcare_date()
             print("Fisier decriptat cu Python")
-            messagebox.showinfo("Succes", "Fisier decriptat")
-            return
+            hash_nou = calculeaza_hash_fisier(path_decriptat)
+            if hash_nou == hash_vechi_din_db:
+                messagebox.showinfo("Succes",
+                                    "Fisier decriptat cu Cryptography\n\nHash-urile se potrivesc")
+            else:
+                messagebox.showwarning("Atentie",
+                                       "Fisier decriptat, dar hash-ul nu se potriveste, fisier corupt.")
         except Exception as e:
             tracemalloc.stop()
             messagebox.showerror("Eroare", f"Decriptare esuata: {e}")
@@ -219,7 +233,13 @@ def buton_decriptare():
         update_fisier(id_fisier, None, "Decriptat")
         incarcare_date()
         print("Fisier decriptat")
-        messagebox.showinfo("Succes", "Fisier decriptat")
+        hash_nou = calculeaza_hash_fisier(path_decriptat)
+        if hash_nou == hash_vechi_din_db:
+            messagebox.showinfo("Succes",
+                                "Fisier decriptat cu OpenSSL\n\nHash-urile se potrivesc")
+        else:
+            messagebox.showwarning("Atentie",
+                                   "Fisier decriptat, dar hash-ul nu se potriveste, fisier corupt.")
     except subprocess.CalledProcessError:
         tracemalloc.stop()
         messagebox.showerror("Eroare", "Decriptare esuata")
