@@ -3,6 +3,7 @@ import os
 import hashlib
 import secrets
 import subprocess
+from datetime import datetime
 
 def init_db():
     conn = sqlite3.connect('local.db')
@@ -140,10 +141,16 @@ def generare_cheie(id_algoritm):
         iv = secrets.token_hex(16)
         lungime_biti = 256
     else:
-        subprocess.run([r"C:\Program Files\Git\usr\bin\openssl.exe", "genrsa", "-out", "private.pem", "2048"], check=True)
-        subprocess.run([r"C:\Program Files\Git\usr\bin\openssl.exe", "rsa", "-in", "private.pem", "-pubout", "-out", "public.pem"], check=True)
-        val_cheie = "private.pem"
-        iv = "public.pem"
+        nume_unic = secrets.token_hex(4)
+        folder_proiect = os.path.dirname(os.path.abspath(__file__))
+        fisier_privat = os.path.join(folder_proiect, f"private_{nume_unic}.pem")
+        fisier_public = os.path.join(folder_proiect, f"public_{nume_unic}.pem")
+        subprocess.run([r"C:\Program Files\Git\usr\bin\openssl.exe", "genrsa", "-out", fisier_privat, "2048"],
+                       check=True)
+        subprocess.run([r"C:\Program Files\Git\usr\bin\openssl.exe", "rsa", "-in", fisier_privat, "-pubout", "-out",
+                        fisier_public], check=True)
+        val_cheie = fisier_privat
+        iv = fisier_public
         lungime_biti = 2048
     conn = sqlite3.connect('local.db')
     c = conn.cursor()
@@ -161,6 +168,29 @@ def get_all_chei_debug():
     conn = sqlite3.connect('local.db')
     c = conn.cursor()
     c.execute('''SELECT * FROM chei''')
+    rez = c.fetchall()
+    conn.close()
+    return rez
+
+def adauga_performanta(id_fisier, framework, time_ms, memorie_mb):
+    timp_local_curent = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect('local.db')
+    c = conn.cursor()
+    c.execute('''
+            INSERT INTO performante(id_fisier, framework, time_ms, memorie_mb, data_test)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (id_fisier, framework, time_ms, memorie_mb, timp_local_curent))
+    conn.commit()
+    conn.close()
+
+def get_all_performante():
+    conn = sqlite3.connect('local.db')
+    c = conn.cursor()
+    c.execute('''
+        SELECT p.id_test, f.nume, p.framework, p.time_ms, p.memorie_mb, p.data_test
+        FROM performante p
+        JOIN fisiere f ON p.id_fisier = f.id_fisier
+    ''')
     rez = c.fetchall()
     conn.close()
     return rez

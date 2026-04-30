@@ -2,6 +2,8 @@ from database import *
 import tkinter as tk
 import subprocess
 import os
+import time
+import tracemalloc
 from tkinter import ttk, filedialog, messagebox
 from cryptography_logic import *
 
@@ -53,6 +55,7 @@ def buton_criptare():
 
     id_algoritm = 1 if algoritm == 'AES' else 2
     alegere_cheie = combo_cheie.get()
+
     if alegere_cheie == "Noua":
         id_cheie, cheie_hex, iv_hex = generare_cheie(id_algoritm)
         update_combo_chei()
@@ -65,21 +68,34 @@ def buton_criptare():
 
     path_criptat = path_original + ".enc"
     platforma = combo_platforma.get()
+
+    nume_framework = "Python" if "Python" in platforma else "OpenSSL"
+    tracemalloc.start()
+    start_time = time.time()
+
     if "Python" in platforma:
         try:
             if "RSA" in algoritm:
                 if not path_original.endswith(".txt"):
                     messagebox.showerror("Eroare", "RSA Python are nevoie de fisier txt")
+                    tracemalloc.stop()
                     return
                 criptare_python_rsa(path_original, path_criptat, iv_hex)
             else:
                 criptare_python_aes(path_original, path_criptat, cheie_hex, iv_hex)
 
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            end_time = time.time()
+            time_ms = (end_time - start_time) * 1000
+            memorie_mb = peak / (1024*1024)
+            adauga_performanta(id_fisier, nume_framework, time_ms, memorie_mb)
+
             os.remove(path_original)
             stare_noua = f"Criptat cu {algoritm} (Cryptography)"
             update_fisier(id_fisier, id_cheie, stare_noua)
             incarcare_date()
-            return  # IMPORTANT: ieșim aici ca să nu mai încerce și cu OpenSSL jos
+            return
         except Exception as e:
             messagebox.showerror("Eroare Python", str(e))
             return
@@ -103,6 +119,13 @@ def buton_criptare():
 
     try:
         subprocess.run(comanda_openssl, check=True)
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        end_time = time.time()
+        timp_ms = (end_time - start_time) * 1000
+        memorie_mb = peak / (1024 * 1024)
+        adauga_performanta(id_fisier, nume_framework, timp_ms, memorie_mb)
+
         print("Fisier criptat")
         os.remove(path_original)
     except subprocess.CalledProcessError:
@@ -140,20 +163,33 @@ def buton_decriptare():
     cheie_hex, iv_hex = date_cheie
     stare_curenta = rand["values"][2]
 
+    nume_framework = "Python" if "(Cryptography)" in stare_curenta else "OpenSSL"
+    tracemalloc.start()
+    start_time = time.time()
+
     if "(Cryptography)" in stare_curenta:
         try:
             if "RSA" in stare_curenta:
                 decriptare_python_rsa(path_criptat, path_decriptat, cheie_hex)
             else:
                 decriptare_python_aes(path_criptat, path_decriptat, cheie_hex, iv_hex)
+
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            end_time = time.time()
+            timp_ms = (end_time - start_time) * 1000
+            memorie_mb = peak / (1024 * 1024)
+            adauga_performanta(id_fisier, nume_framework, timp_ms, memorie_mb)
+
             os.remove(path_criptat)
             update_fisier(id_fisier, None, "Decriptat")
             incarcare_date()
             print("Fisier decriptat cu Python")
-            messagebox.showinfo("Succes", "Fisier decriptat cu framework-ul Python!")
+            messagebox.showinfo("Succes", "Fisier decriptat")
             return
         except Exception as e:
-            messagebox.showerror("Eroare", f"Decriptare esuata (Python): {e}")
+            tracemalloc.stop()
+            messagebox.showerror("Eroare", f"Decriptare esuata: {e}")
             return
 
     comanda_openssl = []
@@ -172,12 +208,20 @@ def buton_decriptare():
 
     try:
         subprocess.run(comanda_openssl, check=True)
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        end_time = time.time()
+        timp_ms = (end_time - start_time) * 1000
+        memorie_mb = peak / (1024 * 1024)
+        adauga_performanta(id_fisier, nume_framework, timp_ms, memorie_mb)
+
         os.remove(path_criptat)
         update_fisier(id_fisier, None, "Decriptat")
         incarcare_date()
         print("Fisier decriptat")
         messagebox.showinfo("Succes", "Fisier decriptat")
     except subprocess.CalledProcessError:
+        tracemalloc.stop()
         messagebox.showerror("Eroare", "Decriptare esuata")
 
 def open_debug_chei():
@@ -196,6 +240,23 @@ def open_debug_chei():
     chei_db = get_all_chei_debug()
     for c in chei_db:
         tabel_debug.insert("", tk.END, values=(c[0], c[1], c[2], c[3], c[4]))
+
+def open_debug_performante():
+    fereastra_perf = tk.Toplevel(fereastra)
+    fereastra_perf.title("Tabela Performante")
+    fereastra_perf.geometry("850x300")
+
+    coloane_perf = ("ID Test", "Nume Fisier", "Framework", "Timp (ms)", "Memorie (MB)", "Data")
+    tabel_perf = ttk.Treeview(fereastra_perf, columns=coloane_perf, show="headings")
+
+    for col in coloane_perf:
+        tabel_perf.heading(col, text=col)
+        tabel_perf.column(col, width=120, anchor="center")
+
+    tabel_perf.pack(fill="both", expand=True, padx=10, pady=10)
+    perf_db = get_all_performante()
+    for p in perf_db:
+        tabel_perf.insert("", tk.END, values=(p[0], p[1], p[2], f"{p[3]:.2f}", f"{p[4]:.4f}", p[5]))
 
 
 def click_tabel(event):
@@ -287,7 +348,13 @@ btn_cripteaza.grid(row=1, column=2, padx=10, pady=10)
 btn_decripteaza = tk.Button(panou_cript, text="Decriptare", command=buton_decriptare, bg="lavender", state=tk.DISABLED)
 btn_decripteaza.grid(row=1, column=3, padx=10, pady=10)
 
-btn_debug = tk.Button(fereastra, text="Vezi Cheile din DB", command=open_debug_chei, bg="lightblue")
-btn_debug.pack(pady=20)
+panou_debug = tk.Frame(fereastra)
+panou_debug.pack(pady=10)
+
+btn_debug_chei = tk.Button(panou_debug, text="Vezi Cheile din DB", command=open_debug_chei, bg="lightblue")
+btn_debug_chei.grid(row=0, column=0, padx=10)
+
+btn_debug_perf = tk.Button(panou_debug, text="Vezi Performantele", command=open_debug_performante, bg="lightblue")
+btn_debug_perf.grid(row=0, column=1, padx=10)
 
 fereastra.mainloop()
